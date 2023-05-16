@@ -1,6 +1,6 @@
 import random
 import typing as tp
-from taptap_utils import _get_string
+from .taptap_utils import _get_string
 import pandas as pd
 from datasets import Dataset
 from dataclasses import dataclass
@@ -60,8 +60,8 @@ class TaptapDataset(Dataset):
                          row.column_names[i], str(row.columns[i].to_pylist()[0]).strip())
              for i in shuffle_idx]
         )
-        shuffled_text += ", "
-        shuffled_text = shuffled_text[:-2]
+        if random.random() < 0.0001:
+            print(shuffled_text)
         tokenized_text = self.tokenizer(shuffled_text)
         tokenized_text['input_ids'] = tokenized_text['input_ids'][:self.max_tokens]
         tokenized_text['attention_mask'] = tokenized_text['attention_mask'][:self.max_tokens]

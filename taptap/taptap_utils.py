@@ -99,7 +99,7 @@ def _get_string(numerical_modeling, numerical_features,
                 value = str(v)
                 return "%s is %s" % (feature, value)
 
-    elif numerical_modeling == 'numsplit':
+    elif numerical_modeling == 'split':
         if feature not in numerical_features or value == 'None':
             return "%s is %s" % (feature, value)
         else:
@@ -112,26 +112,7 @@ def _get_string(numerical_modeling, numerical_features,
                 s += ' %s' % v
             return s
     else:
-        if feature not in numerical_features:
-            return "%s is %s" % (feature, value)
-        else:
-            s = "%s is" % feature
-            c = 0
-            if value == 'None':
-                s += ' None'
-                return s
-            value = float(value)
-            while value > 1 or value < -1:
-                value /= 10
-                c += 1
-            value = '%.2f' % value
-            s += f' {c} @ '
-            if value[0] == '-':
-                s += '-'
-                value = value[1:]
-            value = value[2:]
-            s += value
-            return s
+        raise NotImplementedError(numerical_modeling)
 
 
 def _convert_tokens_to_text(tokens: tp.List[torch.Tensor], tokenizer: AutoTokenizer) -> tp.List[str]:
@@ -199,7 +180,7 @@ def _convert_text_to_tabular_data(text: tp.List[str], df_gen: pd.DataFrame, cat_
                         values[1] not in cat_dist[values[0]]:
                     td[values[0]] = [None]
                     continue
-                if numerical_modeling == 'numsplit' and values[0] in numerical_features and len(values) > 1:
+                if numerical_modeling == 'split' and values[0] in numerical_features and len(values) > 1:
                     values[1] = values[1].replace(" ", "")
                 try:
                     td[values[0]] = [values[1]]

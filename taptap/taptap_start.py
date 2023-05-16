@@ -153,7 +153,7 @@ class ContinuousStart(TaptapStart):
     def get_start_tokens(self, n_samples, imbalance, numerical_modeling='original'):
         start_words = random.choices(self.start_col_dist, k=n_samples)
         # start_words += np.random.normal(size=n_samples) * self.noise  # add noise to start words
-        if numerical_modeling == 'numsplit':
+        if numerical_modeling == 'split':
             start_text = [self.start_col + " is" + self.get_numeracy(s) + "," for s in start_words]
         else:
             start_text = [self.start_col + " is " + format(s, f".{self.decimal_places}f") + "," for s in start_words]

@@ -11,16 +11,13 @@ from tqdm import tqdm
 import gc
 
 import torch
-# from transformers import (AutoTokenizer, LlamaTokenizer, LlamaForCausalLM,
-#                           AutoModelForCausalLM, GPT2LMHeadModel, AutoModel,
-#                           TrainingArguments)
 from transformers import (AutoTokenizer,
-                          AutoModelForCausalLM, GPT2LMHeadModel, AutoModel,
+                          AutoModelForCausalLM,
                           TrainingArguments)
-from taptap_dataset import TaptapDataset, TaptapDataCollator, MyDataset
-from taptap_start import TaptapStart, CategoricalStart, ContinuousStart, RandomStart
-from taptap_trainer import TaptapTrainer
-from taptap_utils import _array_to_dataframe, _get_column_distribution, _convert_tokens_to_text, \
+from .taptap_dataset import TaptapDataset, TaptapDataCollator, MyDataset
+from .taptap_start import TaptapStart, CategoricalStart, ContinuousStart, RandomStart
+from .taptap_trainer import TaptapTrainer
+from .taptap_utils import _array_to_dataframe, _get_column_distribution, _convert_tokens_to_text, \
     _convert_text_to_tabular_data, _get_string, _process_imputation
 
 
@@ -137,7 +134,6 @@ class Taptap:
         Returns:
             TaptapTrainer used for the fine-tuning process
         """
-        self.X_train_impute = data.copy()
         numerical_features = data.select_dtypes(include=np.number).columns.to_list()
         df = _array_to_dataframe(data, columns=column_names)
         self._update_column_information(df)
@@ -234,6 +230,8 @@ class Taptap:
 
                 # Convert tokens back to tabular data
                 text_data = _convert_tokens_to_text(tokens, self.tokenizer)
+                if np.random.random() < 0.01:
+                    print(text_data[0])
                 df_gen = _convert_text_to_tabular_data(text_data, df_gen, self.cat_dist,
                                                        numerical_features=numerical_features,
                                                        numerical_modeling=self.numerical_modeling,

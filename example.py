@@ -5,6 +5,8 @@ from sklearn.model_selection import train_test_split
 import lightgbm as lgb
 import pandas as pd
 from sklearn.metrics import r2_score
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 
 def get_score(train_data, test_data, target_col, best_params):
     train_x = train_data.drop(columns=target_col).copy()
@@ -34,17 +36,18 @@ if __name__ == '__main__':
     )
     print("The score training by the original data is", original_score)
 
-    model = Taptap(llm='taptap-distill',
-                   epochs=0,
+    model = Taptap(llm='ztphs980/taptap-distill',
                    experiment_dir='./experiment_taptap/',
+                   steps=1000,
                    batch_size=8,
+                   numerical_modeling='split',
                    gradient_accumulation_steps=2)
 
     # Fine-tuning
     model.fit(train_data, target_col=target_col, task=task)
 
     # Sampling
-    synthetic_data = model.sample(n_samples=min(int(data.shape[0]) * 5, 150000),
+    synthetic_data = model.sample(n_samples=train_data.shape[0],
                                   data=train_data,
                                   task=task,
                                   max_length=1024)
@@ -56,7 +59,7 @@ if __name__ == '__main__':
     new_score, _ = get_score(
         synthetic_data, test_data, target_col=target_col, best_params=best_params
     )
-    print("The score training by the synthetic data is", original_score)
+    print("The score training by the synthetic data is", new_score)
 
 
 
