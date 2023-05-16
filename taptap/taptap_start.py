@@ -25,7 +25,7 @@ def _get_start_sentence(df, n_lines):
     return s
 
 
-class TapTapStart:
+class TaptapStart:
     """ Abstract super class GReaT Start
 
     GReaT Start creates tokens to start the generation process.
@@ -42,7 +42,7 @@ class TapTapStart:
         """
         self.tokenizer = tokenizer
 
-    def get_start_tokens(self, n_samples: int, imbalance: bool) -> tp.List[tp.List[int]]:
+    def get_start_tokens(self, n_samples: int, imbalance: bool, numerical_modeling='original') -> tp.List[tp.List[int]]:
         """ Get Start Tokens
 
         Creates starting points for the generation process
@@ -56,7 +56,7 @@ class TapTapStart:
         raise NotImplementedError("This has to be overwritten but the subclasses")
 
 
-class CategoricalStart(TapTapStart):
+class CategoricalStart(TaptapStart):
     """ Categorical Starting Feature
 
     A categorical column with its categories is used as starting point.
@@ -84,7 +84,7 @@ class CategoricalStart(TapTapStart):
         self.population = list(start_col_dist.keys())
         self.weights = list(start_col_dist.values())
 
-    def get_start_tokens(self, n_samples, imbalance):
+    def get_start_tokens(self, n_samples, imbalance, numerical_modeling='original'):
         if imbalance:
             values = zip(self.population, self.weights)
             values = sorted(values, key=lambda x: x[1])
@@ -107,7 +107,7 @@ class CategoricalStart(TapTapStart):
         return start
 
 
-class ContinuousStart(TapTapStart):
+class ContinuousStart(TaptapStart):
     """ Continuous Starting Feature
 
     A continuous column with some noise is used as starting point.
@@ -139,10 +139,24 @@ class ContinuousStart(TapTapStart):
         self.noise = noise
         self.decimal_places = decimal_places
 
-    def get_start_tokens(self, n_samples, imbalance):
+    def get_numeracy(self, value):
+        s = ''
+        value = str(value)
+        if '.' in value:
+            tmp = value.split('.')[1]
+            tmp = min(3, len(tmp))
+            value = f"%.{tmp}f" % float(value)
+        for v in value:
+            s += ' %s' % v
+        return s
+
+    def get_start_tokens(self, n_samples, imbalance, numerical_modeling='original'):
         start_words = random.choices(self.start_col_dist, k=n_samples)
         # start_words += np.random.normal(size=n_samples) * self.noise  # add noise to start words
-        start_text = [self.start_col + " is " + format(s, f".{self.decimal_places}f") + "," for s in start_words]
+        if numerical_modeling == 'numsplit':
+            start_text = [self.start_col + " is" + self.get_numeracy(s) + "," for s in start_words]
+        else:
+            start_text = [self.start_col + " is " + format(s, f".{self.decimal_places}f") + "," for s in start_words]
         start = self.tokenizer(start_text, return_tensors="pt", padding=True)
         return start
 
@@ -158,7 +172,7 @@ class ContinuousStart(TapTapStart):
         return start
 
 
-class RandomStart(TapTapStart):
+class RandomStart(TaptapStart):
     """ Random Starting Features
 
     Random column names are used as start point. Can be used if no distribution of any column is known.

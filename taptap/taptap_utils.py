@@ -3,6 +3,9 @@ import typing as tp
 import numpy as np
 import pandas as pd
 import torch
+import warnings
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 from transformers import AutoTokenizer
 
@@ -20,17 +23,19 @@ def _process_imputation(X_train, df):
     num_features = X_train.select_dtypes(include=np.number).columns.to_list()
     cat_features = X_train.select_dtypes(exclude=np.number).columns.to_list()
     for f in num_features:
-        df[f] = df[f].apply(lambda x: x if is_number(x) else np.nan)
+        df[f] = pd.to_numeric(df[f], errors='coerce')
+        # df[f] = df[f].apply(lambda x: x if is_number(x) else np.nan)
     for f in cat_features:
         v = X_train[f].astype(str).unique()
         df[f] = df[f].apply(lambda x: x if str(x) in v else np.nan)
-    df[num_features] = df[num_features].astype(float)
-    df[num_features] = df[num_features].astype(X_train[num_features].dtypes)
+    for f in num_features:
+        mask = df[f].isna()
+        df.loc[~mask, f] = df.loc[~mask, f].astype(X_train[f].dtypes)
     df[cat_features] = df[cat_features].astype(X_train[cat_features].dtypes)
-    if num_features:
-        df[num_features] = df[num_features].fillna(df[num_features].mean())
-    if cat_features:
-        df[cat_features] = df[cat_features].fillna(df[cat_features].mode().iloc[0])
+    # if num_features:
+    #     df[num_features] = df[num_features].fillna(df[num_features].mean())
+    # if cat_features:
+    #     df[cat_features] = df[cat_features].fillna(df[cat_features].mode().iloc[0])
     return df
 
 
@@ -55,7 +60,7 @@ def _array_to_dataframe(data: tp.Union[pd.DataFrame, np.ndarray], columns=None) 
     return pd.DataFrame(data=data, columns=columns)
 
 
-def _get_column_distribution(df: pd.DataFrame, col: str) -> tp.Union[list, dict]:
+def _get_column_distribution(df: pd.DataFrame, col: str, task: str) -> tp.Union[list, dict]:
     """ Returns the distribution of a given column. If continuous, returns a list of all values.
         If categorical, returns a dictionary in form {"A": 0.6, "B": 0.4}
 
@@ -66,16 +71,34 @@ def _get_column_distribution(df: pd.DataFrame, col: str) -> tp.Union[list, dict]
     Returns:
         Distribution of the column
     """
-    if df[col].dtype == "float":
+    assert task in ['classification', 'regression']
+    if task == 'regression':
         col_dist = df[col].to_list()
     else:
         col_dist = df[col].value_counts(1).to_dict()
     return col_dist
 
+
 def _get_string(numerical_modeling, numerical_features,
                 feature, value):
     if numerical_modeling == 'original':
-        return "%s is %s" % (feature, value)
+        if feature not in numerical_features or value == 'None':
+            return "%s is %s" % (feature, value)
+        else:
+            if '.' not in value:
+                return "%s is %s" % (feature, value)
+            else:
+                v = float(value)
+                i = 0
+                if abs(v) < 1e-10:
+                    v = 0
+                else:
+                    while abs(v * (10 ** i)) < 1:
+                        i += 1
+                    v = round(v, max(3, i + 2))
+                value = str(v)
+                return "%s is %s" % (feature, value)
+
     elif numerical_modeling == 'numsplit':
         if feature not in numerical_features or value == 'None':
             return "%s is %s" % (feature, value)
@@ -152,7 +175,7 @@ def _convert_text_to_tabular_data(text: tp.List[str], df_gen: pd.DataFrame, cat_
         cat_dist = {}
     if numerical_features is None:
         numerical_features = []
-        
+
     # Convert text to tabular data
     df_list = [df_gen]
     for t in text:
@@ -181,11 +204,10 @@ def _convert_text_to_tabular_data(text: tp.List[str], df_gen: pd.DataFrame, cat_
                 try:
                     td[values[0]] = [values[1]]
                 except IndexError:
-                    #print("An Index Error occurred - if this happends a lot, consider fine-tuning your model further.")
+                    # print("An Index Error occurred - if this happends a lot, consider fine-tuning your model further.")
                     pass
         # if not isinstance(td[columns[0]], list):
         #     for key in td: td[key] = [td[key]]
         df_list.append(pd.DataFrame(td))
     df_gen = pd.concat(df_list, ignore_index=True, axis=0)
     return df_gen
-

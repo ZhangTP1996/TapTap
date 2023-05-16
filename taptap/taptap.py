@@ -6,25 +6,30 @@ import logging
 
 import numpy as np
 import pandas as pd
-
+import lightgbm as lgb
 from tqdm import tqdm
+import gc
 
 import torch
+# from transformers import (AutoTokenizer, LlamaTokenizer, LlamaForCausalLM,
+#                           AutoModelForCausalLM, GPT2LMHeadModel, AutoModel,
+#                           TrainingArguments)
 from transformers import (AutoTokenizer,
-                          AutoModelForCausalLM,
+                          AutoModelForCausalLM, GPT2LMHeadModel, AutoModel,
                           TrainingArguments)
-from taptap_dataset import TapTapDataset, TapTapDataCollator, MyDataset
-from taptap_start import TapTapStart, CategoricalStart, ContinuousStart, RandomStart
-from taptap_trainer import TapTapTrainer
+from taptap_dataset import TaptapDataset, TaptapDataCollator, MyDataset
+from taptap_start import TaptapStart, CategoricalStart, ContinuousStart, RandomStart
+from taptap_trainer import TaptapTrainer
 from taptap_utils import _array_to_dataframe, _get_column_distribution, _convert_tokens_to_text, \
     _convert_text_to_tabular_data, _get_string, _process_imputation
 
-"""
-The codes are modified from GReaT https://github.com/kathrinse/be_great
-"""
 
-class TapTap:
-    """ 
+class Taptap:
+    """
+
+    The Taptap class handles the whole generation flow. It is used to fine-tune a large language model for tabular data,
+    and to sample synthetic tabular data.
+
     Attributes:
         llm (str): HuggingFace checkpoint of a pretrained large language model, used a basis of our model
         tokenizer (AutoTokenizer): Tokenizer, automatically downloaded from llm-checkpoint
@@ -43,14 +48,13 @@ class TapTap:
 
     def __init__(self,
                  llm: str,
-                 numerical_modeling = 'numsplit',
-                 experiment_dir: str = "trainer",
+                 experiment_dir: str = "trainer_taptap",
                  steps: int = 20000,
                  batch_size: int = 8,
+                 numerical_modeling: str = "split",
                  max_tokens: int = 1024,
-                 **train_kwargs
-                 ):
-        """ 
+                 **train_kwargs):
+        """
 
         Args:
             llm: HuggingFace checkpoint of a pretrained large language model, used a basis of our model
@@ -71,9 +75,9 @@ class TapTap:
         self.experiment_dir = experiment_dir
         self.steps = steps
         self.batch_size = batch_size
-        self.train_hyperparameters = train_kwargs
-        self.max_tokens = max_tokens
         self.numerical_modeling = numerical_modeling
+        self.max_tokens = max_tokens
+        self.train_hyperparameters = train_kwargs
 
         # Needed for the sampling process
         self.columns = None
@@ -83,7 +87,7 @@ class TapTap:
         self.X_train_impute = None
 
 
-    def finetune(self, data_list, numerical_modeling='original',
+    def pretrain(self, data_list, numerical_modeling='original',
                  learning_rate=5e-5, resume_from_checkpoint: tp.Union[bool, str] = False):
         logging.info("Convert data into HuggingFace dataset object...")
 
@@ -97,29 +101,29 @@ class TapTap:
         my_ds.set_tokenizer(self.tokenizer)
 
         # Set training hyperparameters
-        logging.info("Create GReaT Trainer...")
+        logging.info("Create Trainer...")
         training_args = TrainingArguments(self.experiment_dir,
                                           max_steps=self.steps,
                                           learning_rate=learning_rate,
-                                          save_steps=5000,
+                                          save_steps=self.steps,
                                           ddp_find_unused_parameters=False,
                                           per_device_train_batch_size=self.batch_size,
                                           **self.train_hyperparameters)
-        _trainer = TapTapTrainer(self.model, training_args, train_dataset=my_ds, tokenizer=self.tokenizer,
-                                      data_collator=TapTapDataCollator(self.tokenizer))
+        great_trainer = TaptapTrainer(self.model, training_args, train_dataset=my_ds, tokenizer=self.tokenizer,
+                                      data_collator=TaptapDataCollator(self.tokenizer))
 
         # Start training
         logging.info("Start training...")
-        _trainer.train(resume_from_checkpoint=resume_from_checkpoint)
-        return _trainer
+        great_trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+        return great_trainer
 
 
-    def fit(self, data: tp.Union[pd.DataFrame, np.ndarray], target_col: str,
+    def fit(self, data: tp.Union[pd.DataFrame, np.ndarray], target_col: str, task: str,
             column_names: tp.Optional[tp.List[str]] = None,
             numerical_modeling='original',
             conditional_col: tp.Optional[str] = None, resume_from_checkpoint: tp.Union[bool, str] = False) \
-            -> TapTapTrainer:
-        """ Fine-tune GReaT using tabular data.
+            -> TaptapTrainer:
+        """ Fine-tune using tabular data.
 
         Args:
             data: Pandas DataFrame or Numpy Array that contains the tabular data
@@ -132,47 +136,50 @@ class TapTap:
             If path, resumes the training from the given checkpoint (has to be a valid HuggingFace checkpoint!)
 
         Returns:
-            GReaTTrainer used for the fine-tuning process
+            TaptapTrainer used for the fine-tuning process
         """
         self.X_train_impute = data.copy()
         numerical_features = data.select_dtypes(include=np.number).columns.to_list()
         df = _array_to_dataframe(data, columns=column_names)
         self._update_column_information(df)
-        self._update_conditional_information(df, conditional_col)
+        self._update_conditional_information(df, conditional_col, task)
 
         # Convert DataFrame into HuggingFace dataset object
         logging.info("Convert data into HuggingFace dataset object...")
-        _ds = TapTapDataset.from_pandas(df)
-        _ds.set_args(
+        great_ds = TaptapDataset.from_pandas(df)
+        great_ds.set_args(
             numerical_features=numerical_features,
             target=target_col,
             numerical_modeling=numerical_modeling,
         )
-        _ds.set_tokenizer(self.tokenizer)
+        great_ds.set_tokenizer(self.tokenizer)
 
         # Set training hyperparameters
-        logging.info("Create GReaT Trainer...")
-        training_args = TrainingArguments(
-            self.experiment_dir,
-            max_steps=self.steps,
-            per_device_train_batch_size=self.batch_size,
-            save_steps=5000,
-            **self.train_hyperparameters
-        )
-        _trainer = TapTapTrainer(self.model, training_args, train_dataset=_ds, tokenizer=self.tokenizer,
-                                      data_collator=TapTapDataCollator(self.tokenizer))
+        logging.info("Create Taptap Trainer...")
+        training_args = TrainingArguments(self.experiment_dir,
+                                          max_steps=self.steps,
+                                          per_device_train_batch_size=self.batch_size,
+                                          save_steps=self.steps,
+                                          # lr_scheduler_type='constant',
+                                          **self.train_hyperparameters)
+        great_trainer = TaptapTrainer(self.model, training_args, train_dataset=great_ds, tokenizer=self.tokenizer,
+                                      data_collator=TaptapDataCollator(self.tokenizer))
 
-        # Start training
         logging.info("Start training...")
-        _trainer.train(resume_from_checkpoint=resume_from_checkpoint)
-        return _trainer
+        great_trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+        return great_trainer
 
-
-    def sample(self, n_samples: int, data: pd.DataFrame = None, constrain_dist: bool=False,
-               start_col: tp.Optional[str] = "", start_col_dist: tp.Optional[tp.Union[dict, list]] = None,
-               temperature: float = 0.7, k: int = 100, max_length: int = 100, device: str = "cuda",
-               imbalance: bool = False,
-               method: str = 'original') -> pd.DataFrame or (pd.DataFrame, pd.DataFrame):
+    def sample(self,
+               n_samples: int,
+               data: pd.DataFrame,
+               task: str,
+               constrain_dist: bool=False,
+               start_col: tp.Optional[str] = "",
+               start_col_dist: tp.Optional[tp.Union[dict, list]] = None,
+               temperature: float = 0.7, k: int = 100,
+               max_length: int = 1024, device: str = "cuda",
+               imbalance: bool = False
+               ) -> pd.DataFrame or (pd.DataFrame, pd.DataFrame):
         """ Generate synthetic tabular data samples
 
         Args:
@@ -196,13 +203,12 @@ class TapTap:
             Pandas DataFrame with n_samples rows of generated data
         """
         self.tokenizer.padding_side = "left"
-        _start = self._get_start_sampler(start_col, start_col_dist)
-
+        great_start = self._get_start_sampler(start_col, start_col_dist)
 
         self.cat_dist = {}
         if constrain_dist is not False:
             for col in data.select_dtypes(exclude=np.number).columns.to_list():
-                self.cat_dist[col] = _get_column_distribution(data, col)
+                self.cat_dist[col] = _get_column_distribution(data, col, task)
         if self.numerical_modeling != 'original':
             numerical_features = data.select_dtypes(include=np.number).columns.to_list()
         else:
@@ -212,14 +218,12 @@ class TapTap:
 
         # Init empty DataFrame for the generated samples
         df_gen = pd.DataFrame(columns=self.columns)
-        if method == 'bidirectional':
-            df_gen_l = pd.DataFrame(columns=[self.conditional_col])
 
         # Start generation process
         with tqdm(total=n_samples) as pbar:
             already_generated = 0
             while n_samples > df_gen.shape[0]:
-                start = _start.get_start_tokens(k, imbalance)
+                start = great_start.get_start_tokens(k, imbalance, self.numerical_modeling)
 
                 # Generate tokens
                 tokens = self.model.generate(input_ids=start["input_ids"].to(device),
@@ -235,17 +239,11 @@ class TapTap:
                                                        numerical_features=numerical_features,
                                                        numerical_modeling=self.numerical_modeling,
                                                        )
-
                 # Remove rows with flawed numerical values
                 for i_num_cols in self.num_cols:
-                    df_gen = df_gen[pd.to_numeric(df_gen[i_num_cols], errors='coerce').notnull()]
+                    df_gen[i_num_cols] = pd.to_numeric(df_gen[i_num_cols], errors='coerce')
 
                 df_gen[self.num_cols] = df_gen[self.num_cols].astype(float)
-
-                # Remove rows with missing values
-                if method == 'bidirectional':
-                    df_gen_l = df_gen_l.drop(df_gen[df_gen.isna().any(axis=1)].index)
-                df_gen = df_gen.drop(df_gen[df_gen.isna().any(axis=1)].index)
 
                 # Update process bar
                 pbar.update(df_gen.shape[0] - already_generated)
@@ -255,12 +253,11 @@ class TapTap:
         self.tokenizer.padding_side = "right"
         return df_gen.head(n_samples)
 
-    def impute(self, data: pd.DataFrame, temperature: float = 0.7, max_length: int = 300,
-                     k: int = 100, device: str = "cuda"):
+    def impute(self, data: pd.DataFrame, temperature: float = 0.7, max_length: int = 1024,
+                     k: int = 100, device: str = "cuda", do_sample=False):
+
         self.tokenizer.padding_side = "left"
         df_gen = None
-        df_save = pd.DataFrame(columns=['text'])
-        count = 0
         self.model.to(device)
         numerical_features = data.select_dtypes(include=np.number).columns.to_list()
         for i in range(3):
@@ -285,26 +282,19 @@ class TapTap:
             with tqdm(total=len(generated_data)) as pbar:
                 while starting_prompt:
                     inputs = self.tokenizer(starting_prompt[:k], return_tensors="pt", padding=True)
-                    # start_token = torch.tensor(_pad_tokens(self.tokenizer(starting_prompt[:k])["input_ids"])).to(device)
                     # # Generate tokens
                     gen = self.model.generate(input_ids=inputs["input_ids"].to(device),
                                               attention_mask=inputs["attention_mask"].to(device),
                                               max_length=max_length,
-                                              do_sample=False, temperature=temperature,
-                                              pad_token_id=50256, num_beams=3, length_penalty=-1,
+                                              do_sample=do_sample, temperature=temperature,
+                                              pad_token_id=50256, num_beams=3,
+                                              length_penalty=-1,
                                               # force_words_ids=force_words_ids,
                                               # constraints=constraints,
                                               bad_words_ids=[[6045]])
 
                     # Convert Text back to Tabular Data
                     decoded_data = _convert_tokens_to_text(gen, self.tokenizer)
-                    for sp, dd in zip(starting_prompt[:k], decoded_data):
-                        df_save.loc[count] = sp
-                        count += 1
-                        df_save.loc[count] = dd
-                        count += 1
-                    # df_save.loc[count] = decoded_data
-                    count += 1
                     df_gen = _convert_text_to_tabular_data(decoded_data, df_gen,
                                                            numerical_features = numerical_features,
                                                            numerical_modeling = self.numerical_modeling
@@ -314,12 +304,65 @@ class TapTap:
             df_gen = _process_imputation(self.X_train_impute, df_gen)
 
             df_gen = df_gen.reset_index(drop=True)
-        df_save.to_csv('tmp.csv')
         self.tokenizer.padding_side = "right"
         return df_gen
 
+
+    def predict(self, data: pd.DataFrame, temperature: float = 0.7, max_length: int = 1024,
+                     k: int = 100, device: str = "cuda", do_sample=False):
+        self.tokenizer.padding_side = "left"
+        df_gen = None
+        self.model.to(device)
+        numerical_features = data.select_dtypes(include=np.number).columns.to_list()
+        for i in range(3):
+            print(f"Running {i} iteration.")
+            if df_gen is not None:
+                data = df_gen.copy()
+            starting_prompt = []
+            df_gen = [pd.DataFrame(columns=self.columns)]
+            for idx, row in data.iterrows():
+                if row.isna().any():
+                    sentence = ', '.join([_get_string(self.numerical_modeling, numerical_features,
+                                                      f, str(row.loc[f])) for f in row.index[::-1] if
+                                          not pd.isna(row.loc[f])])
+                    sentence += ','
+                    starting_prompt.append(sentence)
+                else:
+                    df_tmp = pd.DataFrame(row).T
+                    df_tmp.columns = self.columns
+                    df_gen.append(df_tmp)
+            df_gen = pd.concat(df_gen, axis=0)
+            generated_data = []
+            with tqdm(total=len(generated_data)) as pbar:
+                while starting_prompt:
+                    inputs = self.tokenizer(starting_prompt[:k], return_tensors="pt", padding=True)
+                    # # Generate tokens
+                    gen = self.model.generate(input_ids=inputs["input_ids"].to(device),
+                                              attention_mask=inputs["attention_mask"].to(device),
+                                              max_length=max_length,
+                                              do_sample=do_sample, temperature=temperature,
+                                              pad_token_id=50256,
+                                              length_penalty=-1,
+                                              bad_words_ids=[[6045]])
+
+                    # Convert Text back to Tabular Data
+                    decoded_data = _convert_tokens_to_text(gen, self.tokenizer)
+                    df_gen = _convert_text_to_tabular_data(decoded_data, df_gen,
+                                                           numerical_features = numerical_features,
+                                                           numerical_modeling = self.numerical_modeling
+                    )
+                    pbar.update(k)
+                    starting_prompt = starting_prompt[k:]
+            df_gen = _process_imputation(self.X_train_impute, df_gen)
+
+            df_gen = df_gen.reset_index(drop=True)
+        self.tokenizer.padding_side = "right"
+        return df_gen
+
+
+
     def save(self, path: str):
-        """ Save Model
+        """
 
         Saves the model weights and a configuration file in the given directory.
 
@@ -348,21 +391,51 @@ class TapTap:
         torch.save(self.model.state_dict(), path + "/model.pt")
 
     def load_finetuned_model(self, path: str):
-        """ Load fine-tuned model
+        """
 
-        Load the weights of a fine-tuned large language model into the pipeline
+        Load the weights of a fine-tuned large language model into the GReaT pipeline
 
         Args:
             path: Path to the fine-tuned model
         """
         self.model.load_state_dict(torch.load(path))
 
+    @classmethod
+    def load_from_dir(cls, path: str):
+        """
+
+        Load trained GReaT model from directory.
+
+        Args:
+            path: Directory where GReaT model is saved
+
+        Returns:
+            New instance of GReaT loaded from directory
+        """
+        assert os.path.isdir(path), f"Directory {path} does not exist."
+
+        # Load attributes
+        with open(path + "/config.json", "r") as f:
+            attributes = json.load(f)
+
+        # Create new be_great model instance
+        great = cls(attributes["llm"])
+
+        # Set all attributes
+        for k, v in attributes.items():
+            setattr(great, k, v)
+
+        # Load model weights
+        great.model.load_state_dict(torch.load(path + "/model.pt", map_location="cpu"))
+
+        return great
+
     def _update_column_information(self, df: pd.DataFrame):
         # Update the column names (and numerical columns for some sanity checks after sampling)
         self.columns = df.columns.to_list()
         self.num_cols = df.select_dtypes(include=np.number).columns.to_list()
 
-    def _update_conditional_information(self, df: pd.DataFrame, conditional_col: tp.Optional[str] = None):
+    def _update_conditional_information(self, df: pd.DataFrame, conditional_col: tp.Optional[str] = None, task=None):
         assert conditional_col is None or isinstance(conditional_col, str), \
             f"The column name has to be a string and not {type(conditional_col)}"
         assert conditional_col is None or conditional_col in df.columns, \
@@ -370,10 +443,10 @@ class TapTap:
 
         # Take the distribution of the conditional column for a starting point in the generation process
         self.conditional_col = conditional_col if conditional_col else df.columns[-1]
-        self.conditional_col_dist = _get_column_distribution(df, self.conditional_col)
+        self.conditional_col_dist = _get_column_distribution(df, self.conditional_col, task)
 
     def _get_start_sampler(self, start_col: tp.Optional[str],
-                           start_col_dist: tp.Optional[tp.Union[tp.Dict, tp.List]]) -> TapTapStart:
+                           start_col_dist: tp.Optional[tp.Union[tp.Dict, tp.List]]) -> TaptapStart:
         if start_col and start_col_dist is None:
             raise ValueError(f"Start column {start_col} was given, but no corresponding distribution.")
         if start_col_dist is not None and not start_col:

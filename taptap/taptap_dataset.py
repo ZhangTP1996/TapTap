@@ -8,7 +8,7 @@ from transformers import DataCollatorWithPadding
 import numpy as np
 
 
-class TapTapDataset(Dataset):
+class TaptapDataset(Dataset):
     """ GReaT Dataset
 
     The GReaTDataset overwrites the _getitem function of the HuggingFace Dataset Class to include the permutation step.
@@ -21,11 +21,14 @@ class TapTapDataset(Dataset):
                  numerical_features,
                  target=None,
                  numerical_modeling='original',
-                 max_tokens=512):
+                 max_tokens=1024,
+                 shuffled_idx=None
+                 ):
         self.numerical_features = numerical_features
         self.target = target
         self.numerical_modeling=numerical_modeling
         self.max_tokens = max_tokens
+        self.shuffled_idx = shuffled_idx
 
     def set_tokenizer(self, tokenizer):
         """ Set the Tokenizer
@@ -45,10 +48,13 @@ class TapTapDataset(Dataset):
         shuffled_text = ""
         # for k in [key, np.random.randint(0, len(self._data))]:
 
-
         row = self._data.fast_slice(key, 1)
-        shuffle_idx = list(range(row.num_columns))
-        random.shuffle(shuffle_idx)
+        if self.shuffled_idx is None:
+            shuffle_idx = list(range(row.num_columns-1))
+            random.shuffle(shuffle_idx)
+        else:
+            shuffle_idx = self.shuffled_idx
+
         shuffled_text += ", ".join(
             [_get_string(self.numerical_modeling, self.numerical_features,
                          row.column_names[i], str(row.columns[i].to_pylist()[0]).strip())
@@ -89,9 +95,10 @@ class MyDataset(Dataset):
         self.length += df.shape[0]
         self.idx += 1
         numerical_features = df.select_dtypes(include=np.number).columns.to_list()
-        great_ds = TapTapDataset.from_pandas(df)
-        great_ds.set_args(False, numerical_features=numerical_features,
+        great_ds = TaptapDataset.from_pandas(df)
+        great_ds.set_args(self.n_line, False, numerical_features=numerical_features,
                           numerical_modeling=self.numerical_modeling,
+                          prompt_lines=self.prompt_lines,
                           max_tokens=self.max_tokens)
         great_ds.set_tokenizer(self.tokenizer)
         self.mydata.append(great_ds)
@@ -112,7 +119,7 @@ class MyDataset(Dataset):
 
 
 @dataclass
-class TapTapDataCollator(DataCollatorWithPadding):
+class TaptapDataCollator(DataCollatorWithPadding):
     """ GReaT Data Collator
 
     Overwrites the DataCollatorWithPadding to also pad the labels and not only the input_ids

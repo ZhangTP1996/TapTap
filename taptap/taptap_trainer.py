@@ -18,7 +18,7 @@ def _seed_worker(_):
     torch.cuda.manual_seed_all(worker_seed)
 
 
-class TapTapTrainer(Trainer):
+class TaptapTrainer(Trainer):
     """ GReaT Trainer
 
     Overwrites the get_train_dataloader methode of the HuggingFace Trainer to not remove the "unused" columns -
