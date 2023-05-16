@@ -120,7 +120,6 @@ class Taptap:
 
     def fit(self, data: tp.Union[pd.DataFrame, np.ndarray], target_col: str, task: str,
             column_names: tp.Optional[tp.List[str]] = None,
-            numerical_modeling='original',
             conditional_col: tp.Optional[str] = None, resume_from_checkpoint: tp.Union[bool, str] = False) \
             -> TaptapTrainer:
         """ Fine-tune using tabular data.
@@ -150,7 +149,7 @@ class Taptap:
         great_ds.set_args(
             numerical_features=numerical_features,
             target=target_col,
-            numerical_modeling=numerical_modeling,
+            numerical_modeling=self.numerical_modeling,
         )
         great_ds.set_tokenizer(self.tokenizer)
 
