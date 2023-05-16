@@ -47,7 +47,7 @@ if __name__ == '__main__':
     model.fit(train_data, target_col=target_col, task=task)
 
     # Sampling
-    synthetic_data = model.sample(n_samples=train_data.shape[0],
+    synthetic_data = model.sample(n_samples=2 * train_data.shape[0],
                                   data=train_data,
                                   task=task,
                                   max_length=1024)
