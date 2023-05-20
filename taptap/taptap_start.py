@@ -26,9 +26,9 @@ def _get_start_sentence(df, n_lines):
 
 
 class TaptapStart:
-    """ Abstract super class GReaT Start
+    """ Abstract super class Taptap Start
 
-    GReaT Start creates tokens to start the generation process.
+    Taptap Start creates tokens to start the generation process.
 
     Attributes:
         tokenizer (AutoTokenizer): Tokenizer, automatically downloaded from llm-checkpoint
