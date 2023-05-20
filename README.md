@@ -1,5 +1,4 @@
 <div id="top" align="center">
-
 <img src=misc/taptap.png width=150 />
 
 Generative Table Pre-training Empowers Models for Tabular Prediction
@@ -8,6 +7,7 @@ Generative Table Pre-training Empowers Models for Tabular Prediction
 <a href="example.py"> Example </a> |  
 <a href="https://huggingface.co/models?search=ztphs980/taptap"> 🤗 Model </a>
 </h3>
+</div>
 
 This is the official Github repository for the paper "Generative Table Pre-training Empowers Models for Tabular Prediction" by Tianping Zhang, Shaowen Wang, Shuicheng Yan, Jian Li, and Qian Liu.
 
@@ -51,3 +51,4 @@ If you find this repository useful in your research, please cite our paper:
 
 - [GreaT](https://github.com/kathrinse/be_great): TapTap is inspired a lot by the awesome work of GreaT. We thank the authors of GreaT for releasing their codebase.
 - [Huggingface](https://huggingface.co/): We use the Huggingface transformers framework to pre-train / fine-tune our models. We thank the team of Huggingface for their great work.
+- [DeepFloyd IF](https://huggingface.co/spaces/DeepFloyd/IF): We use the DeepFloyd IF to generate the project logo.
