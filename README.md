@@ -32,7 +32,7 @@ The <a href="example.py"> example </a> demonstrates the overall process of TapTa
 
 ### Pre-training Corpus
 
-We have uploaded our pre-training corpus to Huggingface datasets. You can download it from [here](https://huggingface.co/datasets/).
+We have uploaded our pre-training corpus to Huggingface datasets. You can download it from [here](https://huggingface.co/datasets/ztphs980/taptap_datasets/).
 
 ## Citation
 
