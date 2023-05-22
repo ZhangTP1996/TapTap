@@ -5,7 +5,8 @@ Generative Table Pre-training Empowers Models for Tabular Prediction
 -----------------------------
 <h3> |<a href="https://arxiv.org/abs/2305.09696"> Paper </a> | 
 <a href="example.py"> Example </a> |  
-<a href="https://huggingface.co/models?search=ztphs980/taptap"> 🤗 Model </a>
+<a href="https://huggingface.co/models?search=ztphs980/taptap"> 🤗 Pre-trained Model </a> |
+<a href="https://huggingface.co/datasets/ztphs980/taptap_datasets"> 📚 Pre-training Dataset </a>
 </h3>
 </div>
 
