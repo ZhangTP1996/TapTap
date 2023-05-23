@@ -33,7 +33,7 @@ The <a href="example.py"> example </a> demonstrates the overall process of TapTa
 
 ### Pre-training Corpus
 
-We have uploaded our pre-training corpus to Huggingface datasets. You can download it from [here](https://huggingface.co/datasets/ztphs980/taptap_datasets/).
+We have uploaded our pre-training corpus to Huggingface datasets. You can download it from [here](https://huggingface.co/datasets/ztphs980/taptap_datasets/) and use this [code](https://github.com/ZhangTP1996/TapTap/blob/master/load_pretraining_datasets.py) to load all the datasets into a dictionary of pd.DataFrame.
 
 ## Citation
 
